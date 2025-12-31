@@ -1,0 +1,46 @@
+
+10 mio UR5e ik_raw calls take 8.5 s
+
+kitchen scene, single thread, sampling:
+4861 checks in 3.2 seconds
+built for sweeping tho, lots of overhead (hierarchical, recreate world, ...)
+~1500/s
+* 8 threads * maybe 2 without overhead = 24k
+~30*30*30 Raster pro sekunde
+looks good!
+
+before adapt:
+Info:    RRTConnectCustom: Created 325 states (136 start + 189 goal)
+Info:    Solution found in 3.334817 seconds
+raw: 49 waypoints
+
+00:00:03.351'917 (100.00 %) program runtime
+------------------------------------------
+00:00:03.216'699 (95.9659 %) topLevelCheck
+00:00:01.703'938 (50.8347 %) checkCollisions
+00:00:00.281'375 (8.39448 %) CollisionChecker initialization
+
+when not doing hierarchically:
+00:00:00.287'169 (100.00 %) program runtime
+------------------------------------------
+00:00:00.262'057 (91.2552 %) topLevelCheck
+00:00:00.160'362 (55.8425 %) checkCollisions
+00:00:00.014'385 (5.00957 %) CollisionChecker initialization
+4861 checks in 0.26 seconds
+~18000/s
+* 8 threads = 150 000
+
+tried Easy3D for 3d visualization since it is the only small thing I could find that supports depth peeling. Played a bit with it, not well documented, didn't manage to change mesh color,
+https://github.com/LiangliangNan/Easy3D/issues/219
+
+downloaded and built VTK (also supports depth peeling), MASSIVE, didn't want to look into it.
+
+the thing is, visualizing through the browser is probably not the most elegant but I just have a ton of experience with three.js and it's very well documented, I will probably be the quickest with that. Let's hope data transmission is fast enough for marching cubes rendering
+update: looks good!
+
+stepped into a trap into which I keep stepping:
+uWebSockets is supposedly "header only" but has dependencies sans fin and sucks to build.
+CivetWeb is what I want. Needs a single c file + optional c++ binding file, http and ws on the same port.
+
+was considering to create a super generic js remote control bridge from c++ which would be much more powerful than meshcat, but then again why would I want to do stuff in c++ that I could do from js which is much simpler.
+Then I was considering to use meshcat but I want depth peeling and it's probably also faster to update the marching cubes mesh by transfering a float32array directly as binary through the ws
