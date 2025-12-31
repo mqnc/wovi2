@@ -13,9 +13,8 @@
     <script type="importmap">
     {
         "imports": {
-          "three": "https://unpkg.com/three@0.155.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.155.0/examples/jsm/",
-          "dat.gui": "https://unpkg.com/dat.gui@0.7.9/build/dat.gui.module.js"
+          "three": "https://unpkg.com/three@0.182.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.182.0/examples/jsm/"
         }
     }
     </script>
@@ -25,6 +24,7 @@
     <script type="module">
         import *as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         const scene = new THREE.Scene();
@@ -35,7 +35,7 @@
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor( 0x123456, 1 );
+        renderer.setClearColor(0x123456, 1);
         document.body.appendChild(renderer.domElement);
 
         const loader = new GLTFLoader()
@@ -55,14 +55,28 @@
         controls.target.set(0, 0, 0);
         controls.update();
 
+        const tcp = new THREE.AxesHelper(0.1)
+        tcp.position.set(-0.5, -0.1, 0.2)
+        scene.add(tcp)
+        const gizmo = new TransformControls(camera, renderer.domElement)
+        
+        gizmo.addEventListener('dragging-changed', function (event) {
+            controls.enabled = !event.value;
+        });
+        gizmo.attach(tcp);
+        gizmo.setMode("rotate")
+        gizmo.space="local"
+        const gizmoHelper = gizmo.getHelper();
+        scene.add(gizmoHelper);
+
         scene.add(new THREE.AxesHelper(1));
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.5));
         const dir = new THREE.DirectionalLight(0xffffff, 1);
         dir.position.set(1, 1, 1);
         scene.add(dir);
-        const sun= new THREE.PointLight(0xffffff, 100)
-        sun.position.set(4,5,6)
+        const sun = new THREE.PointLight(0xffffff, 100)
+        sun.position.set(4, 5, 6)
         scene.add(sun)
 
         const geometry = new THREE.BufferGeometry();
@@ -97,6 +111,10 @@
             geometry.setIndex(new THREE.BufferAttribute(indices, 1));
             geometry.computeBoundingSphere();
         };
+
+        gizmo.addEventListener('change', () => {
+            ws.send(tcp.matrixWorld.clone().transpose().elements)
+        });
 
         function animate() {
             requestAnimationFrame(animate);

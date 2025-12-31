@@ -9,10 +9,11 @@ Successor of my [dissertation project](https://github.com/mqnc/wovi). Planned up
 * consider collisions with objects
 * support the standard vertically-articulated 6-axis kinematics as well as Universal Robots kinematics
 * browser visualization for platform-independence
+* depth peeling for correct transparency
 
 # Project Status
 
-First draft; workspace of a UR5e for a single end effector orientation (which keeps rotating).
+First draft; workspace of a UR5e for a single end effector orientation, can be changed via gizmo.
 
 # Usage
 
