@@ -59,13 +59,13 @@
         tcp.position.set(-0.5, -0.1, 0.2)
         scene.add(tcp)
         const gizmo = new TransformControls(camera, renderer.domElement)
-        
+
         gizmo.addEventListener('dragging-changed', function (event) {
             controls.enabled = !event.value;
         });
         gizmo.attach(tcp);
         gizmo.setMode("rotate")
-        gizmo.space="local"
+        gizmo.space = "local"
         const gizmoHelper = gizmo.getHelper();
         scene.add(gizmoHelper);
 
@@ -112,9 +112,14 @@
             geometry.computeBoundingSphere();
         };
 
-        gizmo.addEventListener('change', () => {
-            ws.send(tcp.matrixWorld.clone().transpose().elements)
-        });
+        let lastState = ""
+        window.setInterval(() => {
+            let state = tcp.matrixWorld.clone().transpose().elements.join(",")
+            if (state != lastState) {
+                ws.send(state)
+                lastState = state
+            }
+        }, 50)
 
         function animate() {
             requestAnimationFrame(animate);

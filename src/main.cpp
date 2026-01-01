@@ -6,6 +6,8 @@
 #include <thread>
 #include <iostream>
 #include <sstream>
+#include <atomic>
+#include <mutex>
 
 #define RAW_KINEMATICS_FUNCTIONS
 #include "kinematics/ur/urkin.h"
@@ -25,12 +27,12 @@ std::array<std::array<double, 2>, 6> jointLimits = {{
 }};
 
 const int targetConfigId = 0;
+const std::vector<int> resSteps = {40, 80, 160, 320};
 
-const float n = 40;
+const float xMin = -1.0, xMax = 1.0;
+const float yMin = -1.0, yMax = 1.0;
+const float zMin = -1.0 + kine.d1, zMax = 1.0 + kine.d1;
 
-const float xMin = -1.0, xMax = 1.0, nx = n;
-const float yMin = -1.0, yMax = 1.0, ny = n;
-const float zMin = -1.0 + kine.d1, zMax = 1.0 + kine.d1, nz = n;
 
 double ikScore(double* pose) {
 	// we will try to tweak this to give distance-like values around the validity boundary
@@ -66,203 +68,153 @@ double ikScore(double* pose) {
 }
 
 
-using Clock = std::chrono::steady_clock;
+void blur3D(std::vector<MC::MC_FLOAT>& f, int nx, int ny, int nz) {
+	static const float k[3][3][3] = {
+		{{1, 2, 1}, {2, 4, 2}, {1, 2, 1}},
+		{{2, 4, 2}, {4, 8, 4}, {2, 4, 2}},
+		{{1, 2, 1}, {2, 4, 2}, {1, 2, 1}}
+	};
+	const float norm = 64.0f;
+
+	std::vector<MC::MC_FLOAT> tmp = f;
+
+	auto idx = [&](int x, int y, int z) {
+		return (z * ny + y) * nx + x;
+	};
+
+	for (int z = 1; z < nz - 1; ++z)
+		for (int y = 1; y < ny - 1; ++y)
+			for (int x = 1; x < nx - 1; ++x) {
+				float acc = 0.0f;
+				for (int dz = -1; dz <= 1; ++dz)
+					for (int dy = -1; dy <= 1; ++dy)
+						for (int dx = -1; dx <= 1; ++dx)
+							acc += k[dz + 1][dy + 1][dx + 1] * tmp[idx(x + dx, y + dy, z + dz)];
+
+				f[idx(x, y, z)] = acc / norm;
+			}
+}
+
+
+
+std::atomic<uint64_t> latestRequestId {0};
+std::array<double, 12> sharedPose;
+std::atomic<mg_connection*> sharedConn {nullptr};
+
+void worker() {
+	uint64_t lastHandled = 0;
+
+	while (true) {
+		uint64_t currentRequestId = latestRequestId.load();
+		if (currentRequestId == lastHandled) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+			continue;
+		}
+
+		auto pose = sharedPose;
+		mg_connection* conn = sharedConn.load();
+
+		for (int res: resSteps) {
+
+			int xRes = res;
+			int yRes = res;
+			int zRes = res;
+
+			std::vector<MC::MC_FLOAT> field(xRes * yRes * zRes);
+			double poseRaw[12];
+			memcpy(poseRaw, pose.data(), sizeof(poseRaw));
+
+			for (int iz = 0; iz < zRes; ++iz) {
+				if (latestRequestId.load() != currentRequestId) break;
+				float z = zMin + iz * (zMax - zMin) / (zRes - 1);
+
+				for (int iy = 0; iy < yRes; ++iy) {
+					if (latestRequestId.load() != currentRequestId) break;
+					float y = yMin + iy * (yMax - yMin) / (yRes - 1);
+
+					for (int ix = 0; ix < xRes; ++ix) {
+						if (latestRequestId.load() != currentRequestId) break;
+
+						float x = xMin + ix * (xMax - xMin) / (xRes - 1);
+						poseRaw[3] = x; poseRaw[7] = y; poseRaw[11] = z;
+						field[(iz * yRes + iy) * xRes + ix] = ikScore(poseRaw);
+					}
+				}
+			}
+
+			if (latestRequestId.load() != currentRequestId) break;
+
+			blur3D(field, xRes, yRes, zRes);
+
+			MC::mcMesh mesh;
+			MC::marching_cube(field.data(), xRes, yRes, zRes, mesh);
+
+			if (latestRequestId.load() != currentRequestId) break;
+
+			uint32_t vc = mesh.vertices.size();
+			uint32_t ic = mesh.indices.size();
+
+			size_t bytes = 8 + vc * 6 * sizeof(float) + ic * sizeof(uint32_t);
+			std::vector<char> packet(bytes);
+			char* p = packet.data();
+
+			memcpy(p, &vc, 4); p += 4;
+			memcpy(p, &ic, 4); p += 4;
+
+			for (auto& v: mesh.vertices) {
+				float tmp[3] = {
+					xMin + v.x * (xMax - xMin) / (xRes - 1),
+					yMin + v.y * (yMax - yMin) / (yRes - 1),
+					zMin + v.z * (zMax - zMin) / (zRes - 1)
+				};
+				memcpy(p, tmp, 12); p += 12;
+			}
+
+			for (auto& n: mesh.normals) {
+				float tmp[3] = {n.x, n.y, n.z};
+				memcpy(p, tmp, 12); p += 12;
+			}
+
+			memcpy(p, mesh.indices.data(), ic * sizeof(uint32_t));
+
+			mg_websocket_write(
+				sharedConn,
+				MG_WEBSOCKET_OPCODE_BINARY,
+				packet.data(),
+				packet.size()
+			);
+		}
+
+		lastHandled = currentRequestId;
+	}
+}
+
 
 class WSHandler: public CivetWebSocketHandler {
 public:
-	bool handleConnection(CivetServer*, const mg_connection*) override {
+	bool handleConnection(CivetServer*, const mg_connection*) override { return true; }
+
+	bool handleData(CivetServer*, mg_connection* conn, int, char* data, size_t len) override {
+
+		std::stringstream ss(std::string(data, len));
+		for (int i = 0; i < 12; ++i) {
+			std::string t;
+			std::getline(ss, t, ',');
+			sharedPose[i] = std::stod(t);
+		}
+
+		sharedConn.store(conn);
+		latestRequestId.fetch_add(1);
 		return true;
-	}
 
-	void handleReadyState(CivetServer*, mg_connection* conn) override {
-		/*
-        std::thread([conn]() {
-
-			std::vector<MC::MC_FLOAT> field(nx * ny * nz);
-
-			auto t0 = Clock::now();
-			float phi = 0.0;
-
-			while (true) {
-				float t = std::chrono::duration<float>(Clock::now() - t0).count();
-
-				// double pose[12] = {
-				// 	1, 0, 0, 0,
-				// 	0, 1, 0, 0,
-				// 	0, 0, 1, 0
-				// };
-
-				const float c = cos(phi);
-				const float s = sin(phi);
-
-				double pose[12] = {
-					c, 0, -s, 0,
-					0, 1, 0, 0,
-					s, 0, c, 0
-				};
-
-				for (int iz = 0; iz < nz; ++iz) {
-					float z = zMin + iz * (zMax - zMin) / (nz - 1);
-					for (int iy = 0; iy < ny; ++iy) {
-						float y = yMin + iy * (yMax - yMin) / (ny - 1);
-						for (int ix = 0; ix < nx; ++ix) {
-							float x = xMin + ix * (xMax - xMin) / (nx - 1);
-
-							pose[3] = x;
-							pose[7] = y;
-							pose[11] = z;
-
-							double v = ikScore(pose);
-
-							field[(iz * ny + iy) * nx + ix] = v;
-						}
-					}
-				}
-
-				MC::mcMesh mesh;
-				MC::marching_cube(field.data(), nx, ny, nz, mesh);
-
-				const uint32_t vertexCount = mesh.vertices.size();
-				const uint32_t indexCount = mesh.indices.size();
-
-				size_t bytes =
-					4 + 4 +
-					vertexCount * 3 * sizeof(float) + // positions
-					vertexCount * 3 * sizeof(float) + // normals
-					indexCount * sizeof(uint32_t);
-
-				std::vector<char> packet(bytes);
-				char* p = packet.data();
-
-				memcpy(p, &vertexCount, 4); p += 4;
-				memcpy(p, &indexCount, 4); p += 4;
-
-				for (const auto& v: mesh.vertices) {
-					float x = xMin + v.x * (xMax - xMin) / (nx - 1);
-					float y = yMin + v.y * (yMax - yMin) / (ny - 1);
-					float z = zMin + v.z * (zMax - zMin) / (nz - 1);
-					float tmp[3] = {x, y, z};
-					memcpy(p, tmp, sizeof(tmp));
-					p += sizeof(tmp);
-				}
-
-				for (const auto& n: mesh.normals) {
-					float tmp[3] = {n.x, n.y, n.z};
-					memcpy(p, tmp, sizeof(tmp));
-					p += sizeof(tmp);
-				}
-
-				memcpy(p, mesh.indices.data(), indexCount * sizeof(uint32_t));
-
-				mg_websocket_write(
-					conn,
-					MG_WEBSOCKET_OPCODE_BINARY,
-					packet.data(),
-					packet.size()
-				);
-
-				phi += 0.1;
-				std::this_thread::sleep_for(std::chrono::milliseconds(1));
-			}
-		}) .detach();
-        */
-	}
-
-	bool handleData(CivetServer* server,
-		struct mg_connection* conn,
-		int bits,
-		char* data,
-		size_t data_len
-		) override {
-
-		std::vector<MC::MC_FLOAT> field(nx * ny * nz);
-
-		double pose[12] = {
-			1, 0, 0, 0,
-			0, 1, 0, 0,
-			0, 0, 1, 0
-		};
-
-		std::stringstream ss(std::string(data, data_len));
-		for (int i = 0; i < 12; ++i)
-		{
-			std::string token;
-			std::getline(ss, token, ',');
-			pose[i] = std::stod(token);
-		}
-
-		for (int iz = 0; iz < nz; ++iz) {
-			float z = zMin + iz * (zMax - zMin) / (nz - 1);
-			for (int iy = 0; iy < ny; ++iy) {
-				float y = yMin + iy * (yMax - yMin) / (ny - 1);
-				for (int ix = 0; ix < nx; ++ix) {
-					float x = xMin + ix * (xMax - xMin) / (nx - 1);
-
-					pose[3] = x;
-					pose[7] = y;
-					pose[11] = z;
-
-					double v = ikScore(pose);
-
-					field[(iz * ny + iy) * nx + ix] = v;
-				}
-			}
-		}
-
-		MC::mcMesh mesh;
-		MC::marching_cube(field.data(), nx, ny, nz, mesh);
-
-		const uint32_t vertexCount = mesh.vertices.size();
-		const uint32_t indexCount = mesh.indices.size();
-
-		size_t bytes =
-			4 + 4 +
-			vertexCount * 3 * sizeof(float) + // positions
-			vertexCount * 3 * sizeof(float) + // normals
-			indexCount * sizeof(uint32_t);
-
-		std::vector<char> packet(bytes);
-		char* p = packet.data();
-
-		memcpy(p, &vertexCount, 4); p += 4;
-		memcpy(p, &indexCount, 4); p += 4;
-
-		for (const auto& v: mesh.vertices) {
-			float x = xMin + v.x * (xMax - xMin) / (nx - 1);
-			float y = yMin + v.y * (yMax - yMin) / (ny - 1);
-			float z = zMin + v.z * (zMax - zMin) / (nz - 1);
-			float tmp[3] = {x, y, z};
-			memcpy(p, tmp, sizeof(tmp));
-			p += sizeof(tmp);
-		}
-
-		for (const auto& n: mesh.normals) {
-			float tmp[3] = {n.x, n.y, n.z};
-			memcpy(p, tmp, sizeof(tmp));
-			p += sizeof(tmp);
-		}
-
-		memcpy(p, mesh.indices.data(), indexCount * sizeof(uint32_t));
-
-		mg_websocket_write(
-			conn,
-			MG_WEBSOCKET_OPCODE_BINARY,
-			packet.data(),
-			packet.size()
-		);
-
-		return true;
 	}
 };
 
 int main() {
-
-	const char* options[] = {
-		"listening_ports", "8080",
-		nullptr
-	};
-
+	const char* options[] = {"listening_ports", "8080", nullptr};
 	CivetServer server(options);
+
+	std::thread(worker).detach();
 
 	WSHandler ws;
 	server.addWebSocketHandler("/ws", &ws);
