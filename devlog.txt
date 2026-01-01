@@ -44,3 +44,7 @@ CivetWeb is what I want. Needs a single c file + optional c++ binding file, http
 
 was considering to create a super generic js remote control bridge from c++ which would be much more powerful than meshcat, but then again why would I want to do stuff in c++ that I could do from js which is much simpler.
 Then I was considering to use meshcat but I want depth peeling and it's probably also faster to update the marching cubes mesh by transfering a float32array directly as binary through the ws
+
+
+
+sometimes somehow not responsive...

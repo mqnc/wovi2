@@ -35,8 +35,6 @@ const float zMin = -1.0 + kine.d1, zMax = 1.0 + kine.d1;
 
 
 double ikScore(double* pose) {
-	// we will try to tweak this to give distance-like values around the validity boundary
-	// such that the marching cubes surface is nice and smooth
 
 	double q_sols[48];
 	auto num_sols = ik_raw(pose, q_sols, 0, kine);
@@ -111,6 +109,12 @@ void worker() {
 			continue;
 		}
 
+        bool firstIteration = true;
+
+        auto cancel = [&](){
+            return latestRequestId.load() != currentRequestId && !firstIteration;
+        };
+
 		auto pose = sharedPose;
 		mg_connection* conn = sharedConn.load();
 
@@ -125,15 +129,15 @@ void worker() {
 			memcpy(poseRaw, pose.data(), sizeof(poseRaw));
 
 			for (int iz = 0; iz < zRes; ++iz) {
-				if (latestRequestId.load() != currentRequestId) break;
+				if (cancel()) break;
 				float z = zMin + iz * (zMax - zMin) / (zRes - 1);
 
 				for (int iy = 0; iy < yRes; ++iy) {
-					if (latestRequestId.load() != currentRequestId) break;
+					if (cancel()) break;
 					float y = yMin + iy * (yMax - yMin) / (yRes - 1);
 
 					for (int ix = 0; ix < xRes; ++ix) {
-						if (latestRequestId.load() != currentRequestId) break;
+						if (cancel()) break;
 
 						float x = xMin + ix * (xMax - xMin) / (xRes - 1);
 						poseRaw[3] = x; poseRaw[7] = y; poseRaw[11] = z;
@@ -142,14 +146,14 @@ void worker() {
 				}
 			}
 
-			if (latestRequestId.load() != currentRequestId) break;
+			if (cancel()) break;
 
 			blur3D(field, xRes, yRes, zRes);
 
 			MC::mcMesh mesh;
 			MC::marching_cube(field.data(), xRes, yRes, zRes, mesh);
 
-			if (latestRequestId.load() != currentRequestId) break;
+			if (cancel()) break;
 
 			uint32_t vc = mesh.vertices.size();
 			uint32_t ic = mesh.indices.size();
@@ -183,6 +187,8 @@ void worker() {
 				packet.data(),
 				packet.size()
 			);
+
+            firstIteration = false;
 		}
 
 		lastHandled = currentRequestId;
