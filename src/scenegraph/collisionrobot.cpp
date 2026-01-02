@@ -161,8 +161,8 @@ CollisionRobotTemplate::CollisionRobotTemplate(
 	const UrdfRobot& urdfRobot,
 	const Dict<string>& meshSources,
 	const vector<string>& selectedJoints,
-	const Dict<vector<string>>& collisionIgnoreGroups,
-	const bool encapsulate): id {id},
+	const Dict<vector<string>>& collisionIgnoreGroups
+	): id {id},
 	collisionIgnoreGroups {collisionIgnoreGroups},
 	selectedJoints {selectedJoints}
 {

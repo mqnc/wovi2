@@ -7,15 +7,10 @@
 #include "btBulletCollisionCommon.h"
 #include "BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.h"
 
-struct CollisionIgnoreGroupBitMasks {
-	BitMask globalGroups;
-	BitMask temporaryGroups;
-};
-
 class CollisionChecker {
 
 public:
-	using SceneInfo = vector<pair<btCollisionObject*, CollisionIgnoreGroupBitMasks>>;
+	using SceneInfo = vector<pair<btCollisionObject*, BitMask>>;
 
 private:
 	struct FilterCallback: public btOverlapFilterCallback {
@@ -32,9 +27,7 @@ private:
 			int i0 = static_cast<btCollisionObject*>(proxy0->m_clientObject)->getWorldArrayIndex();
 			int i1 = static_cast<btCollisionObject*>(proxy1->m_clientObject)->getWorldArrayIndex();
 
-			return
-				(objects[i0].second.globalGroups & objects[i1].second.globalGroups) == false
-				&& (objects[i0].second.temporaryGroups & objects[i1].second.temporaryGroups) == false;
+			return (objects[i0].second & objects[i1].second) == false;
 		}
 	};
 
@@ -57,13 +50,13 @@ private:
 	// profiling showed that these two eat a lot of time when initialized again for each scene
 	static customCollisionConfiguration collisionConfiguration;
 	static btCollisionDispatcher dispatcher;
-	
+
 	unique_ptr<btOverlappingPairCache> pairCache;
 	unique_ptr<FilterCallback> filterCallback;
 	unique_ptr<btDbvtBroadphase> broadphaseInterface;
 	unique_ptr<btCollisionWorld> collisionWorld;
 
-SceneInfo objects;
+	SceneInfo objects;
 
 public:
 	CollisionChecker(

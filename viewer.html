@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>Marching Cubes Viewer</title>
+    <title>WoVi2</title>
     <style>
         body {
             margin: 0;
@@ -40,7 +40,7 @@
 
         const loader = new GLTFLoader()
         loader.load(
-            "models/ur5e.glb",
+            "models_/ur5e.glb",
             function (gltf) { scene.add(gltf.scene) },
             function (xhr) {
                 // console.log((xhr.loaded / xhr.total * 100) + '% loaded')
@@ -50,6 +50,19 @@
                 reject()
             }
         )
+
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileCubemapShader()
+        const cubeLoader = new THREE.CubeTextureLoader();
+        let textureCube = cubeLoader.load([`bg.jpg`, `bg.jpg`, `bg.jpg`, `bg.jpg`, `bg.jpg`, `bg.jpg`], function (texture) {
+            let pmrem = pmremGenerator.fromCubemap(texture)
+            scene.environment = pmrem.texture;
+        });
+
+        let textureCube2 = cubeLoader.load([`bg2.jpg`, `bg2.jpg`, `bg2.jpg`, `bg2.jpg`, `bg2.jpg`, `bg2.jpg`], function (texture) {
+            let pmrem = pmremGenerator.fromCubemap(texture)
+            scene.background = pmrem.texture;
+        });
 
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.target.set(0, 0, 0);
@@ -88,6 +101,7 @@
         scene.add(mesh2);
 
         const ws = new WebSocket('ws://localhost:8080/ws');
+        //const ws = { send: () => { } }
         ws.binaryType = 'arraybuffer';
 
         ws.onmessage = (ev) => {

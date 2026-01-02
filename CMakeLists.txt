@@ -41,6 +41,8 @@ target_compile_definitions(civetweb
 add_executable(main
     src/scenegraph/collisionrobot.cpp
     src/scenegraph/scene.cpp
+    src/scenegraph/spawn.cpp
+    src/urdf/urdf.cpp
     src/collision/collisionchecker.cpp
     src/collision/shapes/linkingcompoundshape.cpp
     src/collision/shapes/compoundshape.cpp
@@ -52,6 +54,7 @@ add_executable(main
     src/collision/shapes/shape.cpp
     src/collision/shapes/visualmeshshape.cpp
     src/kinematics/ur/urkin.cpp
+    src/thirdparty/tinyxml2/tinyxml2.cpp
     src/main.cpp
 )
 target_compile_definitions(main

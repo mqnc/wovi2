@@ -11,10 +11,9 @@ class CollisionIgnoreGroupManager {
 
 public:
 
-	template<template<class> class Cont>
 	void createGroup(
 		const string& name,
-		const Cont<string>& memberIds
+		const vector<string>& memberIds
 	) {
 		ready = false;
 
@@ -31,9 +30,8 @@ public:
 		}
 	}
 
-	template<template<class> class Cont>
 	void resetGroup(const string& name,
-		const Cont<string>& memberIds
+		const vector<string>& memberIds
 	) {
 		ready = false;
 

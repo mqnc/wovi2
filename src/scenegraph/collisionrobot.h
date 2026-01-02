@@ -25,8 +25,8 @@ public:
 		const UrdfRobot& urdfRobot,
 		const Dict<string>& meshSources = {},
 		const vector<string>& selectedJoints = {},
-		const Dict<vector<string>>& collisionIgnoreGroups = {},
-		const bool encapsulate = false);
+		const Dict<vector<string>>& collisionIgnoreGroups = {}
+	);
 
 	CollisionRobotTemplate() {}
 
