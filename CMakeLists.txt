@@ -39,20 +39,23 @@ target_compile_definitions(civetweb
 # main
 
 add_executable(main
+    src/scenegraph/collisionrobot.cpp
+    src/scenegraph/scene.cpp
     src/collision/collisionchecker.cpp
     src/collision/shapes/linkingcompoundshape.cpp
     src/collision/shapes/compoundshape.cpp
+    src/collision/shapes/concaveshape.cpp
+    src/collision/shapes/sphereshape.cpp
     src/collision/shapes/cylinderzshape.cpp
     src/collision/shapes/boxshape.cpp
     src/collision/shapes/inflatedconvexhullshape.cpp
     src/collision/shapes/shape.cpp
     src/collision/shapes/visualmeshshape.cpp
-    src/interface/sceneio.cpp
-    src/interface/preprocessor/converter.cpp
     src/kinematics/ur/urkin.cpp
-    src/export/shapestojson.cpp
-    src/interface/planningrequest.cpp
     src/main.cpp
+)
+target_compile_definitions(main
+    PUBLIC COLLISION_BETWEEN_INFLATED_BOXES_CONSIDERS_ROUNDED_EDGES
 )
 
 target_link_libraries(main bullet civetweb)
