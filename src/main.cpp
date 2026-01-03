@@ -29,9 +29,9 @@ std::array<std::array<double, 2>, 6> jointLimits = {{
 const int targetConfigId = 0;
 
 Sampling sampling {
-	-1.0, 1.0, 30,
-	-1.0, 1.0, 30,
-	-1.0f + (float) kine.d1, 1.0f + (float) kine.d1, 30,
+	-1.0, 1.0, 24,
+	-1.0, 1.0, 24,
+	-1.0f + (float) kine.d1, 1.0f + (float) kine.d1, 24,
 	{1, 2, 4, 8}
 };
 
