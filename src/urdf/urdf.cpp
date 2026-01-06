@@ -57,17 +57,17 @@ valarray<double> valarray3FromString(string s) {
 	stringstream ss(s);
 	double x, y, z;
 	ss >> x >> y >> z;
-	return valarray<double>{ x, y, z };
+	return valarray<double> {x, y, z};
 }
 
 UrdfTrafo originFromXml(XMLElement* xml) {
 	if (xml) {
 		auto xyz = valarray3FromString(getAttribute(xml, "xyz", "0 0 0"));
 		auto rpy = valarray3FromString(getAttribute(xml, "rpy", "0 0 0"));
-		return UrdfTrafo{ xyz, rpy };
+		return UrdfTrafo {xyz, rpy};
 	}
 	else {
-		return UrdfTrafo{ {0, 0, 0}, {0, 0, 0} };
+		return UrdfTrafo {{0, 0, 0}, {0, 0, 0}};
 	}
 }
 
@@ -75,66 +75,75 @@ UrdfRobot interpretXml(XMLDocument& xml) {
 
 	auto robotXml = getRequiredChild(&xml, "robot");
 
-	UrdfRobot robot{getAttribute(robotXml, "name")};
+	UrdfRobot robot {getAttribute(robotXml, "name")};
 
 	for (
 		auto link = robotXml->FirstChildElement("link");
 		link != nullptr;
 		link = link->NextSiblingElement("link")
-		) {
+	) {
 		auto name = getAttribute(link, "name");
-		vector<UrdfCollisionGeometry> collisionGeometries;
+		vector<UrdfGeometry> collisionGeometries;
+		vector<UrdfGeometry> visualGeometries;
 
-		for (
-			auto collision = link->FirstChildElement("collision");
-			collision != nullptr;
-			collision = collision->NextSiblingElement("collision")
+		for (auto collisionOrVisual: {"collision", "visual"}) {
+			for (
+				auto instance = link->FirstChildElement(collisionOrVisual);
+				instance != nullptr;
+				instance = instance->NextSiblingElement(collisionOrVisual)
 			) {
-			auto originXml = collision->FirstChildElement("origin");
-			auto origin = originFromXml(originXml);
-			auto geometry = getRequiredChild(collision, "geometry");
+				auto originXml = instance->FirstChildElement("origin");
+				auto origin = originFromXml(originXml);
+				auto geometry = getRequiredChild(instance, "geometry");
 
-			string type = "";
-			valarray<double> size{ NaN, NaN, NaN };
-			double radius = NaN;
-			double length = NaN;
-			string filename = "";
-			valarray<double> meshScale{ 1, 1, 1 };
+				string type = "";
+				valarray<double> size {NaN, NaN, NaN};
+				double radius = NaN;
+				double length = NaN;
+				string filename = "";
+				valarray<double> meshScale {1, 1, 1};
 
-			if (auto box = geometry->FirstChildElement("box")) {
-				type = "box";
-				size = valarray3FromString(getAttribute(box, "size"));
-			}
-			else if (auto cylinder = geometry->FirstChildElement("cylinder")) {
-				type = "cylinder";
-				radius = std::stod(getAttribute(cylinder, "radius"));
-				length = std::stod(getAttribute(cylinder, "length"));
-			}
-			else if (auto sphere = geometry->FirstChildElement("sphere")) {
-				type = "sphere";
-				radius = std::stod(getAttribute(sphere, "radius"));
-			}
-			else if (auto mesh = geometry->FirstChildElement("mesh")) {
-				type = "mesh";
-				filename = getAttribute(mesh, "filename");
-				meshScale = valarray3FromString(getAttribute(mesh, "scale", "1 1 1"));
-			}
+				if (auto box = geometry->FirstChildElement("box")) {
+					type = "box";
+					size = valarray3FromString(getAttribute(box, "size"));
+				}
+				else if (auto cylinder = geometry->FirstChildElement("cylinder")) {
+					type = "cylinder";
+					radius = std::stod(getAttribute(cylinder, "radius"));
+					length = std::stod(getAttribute(cylinder, "length"));
+				}
+				else if (auto sphere = geometry->FirstChildElement("sphere")) {
+					type = "sphere";
+					radius = std::stod(getAttribute(sphere, "radius"));
+				}
+				else if (auto mesh = geometry->FirstChildElement("mesh")) {
+					type = "mesh";
+					filename = getAttribute(mesh, "filename");
+					meshScale = valarray3FromString(getAttribute(mesh, "scale", "1 1 1"));
+				}
 
-			collisionGeometries.push_back(UrdfCollisionGeometry{
-				type, origin, size, meshScale, radius, length, filename });
+				if (strcmp(collisionOrVisual, "collision") == 0) {
+					collisionGeometries.push_back(UrdfGeometry {
+						type, origin, size, meshScale, radius, length, filename});
+				}
+				else {
+					visualGeometries.push_back(UrdfGeometry {
+						type, origin, size, meshScale, radius, length, filename});
+				}
+			}
 		}
 
-		robot.links.insert(UrdfLink{ name, collisionGeometries });
+		robot.links.insert(UrdfLink {name, collisionGeometries, visualGeometries});
 	}
 
 	for (
 		auto joint = robotXml->FirstChildElement("joint");
 		joint != nullptr;
 		joint = joint->NextSiblingElement("joint")
-		) {
+	) {
 		auto name = getAttribute(joint, "name");
 		auto type = getAttribute(joint, "type");
-		if (type == "revolute" || type =="continuous" || type == "prismatic"){
+		if (type == "revolute" || type == "continuous" || type == "prismatic") {
 			robot.defaultJointSelection.push_back(name);
 		}
 		auto parent = getAttribute(getRequiredChild(joint, "parent"), "link");
@@ -145,21 +154,21 @@ UrdfRobot interpretXml(XMLDocument& xml) {
 		auto axisXml = joint->FirstChildElement("axis");
 		auto axis = axisXml ?
 			valarray3FromString(getAttribute(axisXml, "xyz"))
-			: valarray<double>{ 1, 0, 0 };
+			: valarray<double> {1, 0, 0};
 
 		auto limit = [&]() {
 			if ("revolute" == type || "prismatic" == type) {
 				auto lower = getAttribute(getRequiredChild(joint, "limit"), "lower", "0");
 				auto upper = getAttribute(getRequiredChild(joint, "limit"), "upper", "0");
-				return array<double, 2>{std::stod(lower), std::stod(upper)};
+				return array<double, 2> {std::stod(lower), std::stod(upper)};
 			}
 			else {
-				return array<double, 2>{NaN, NaN};
+				return array<double, 2> {NaN, NaN};
 			}
 		}();
 
-		robot.joints.insert(UrdfJoint{
-			name, type, parent, child, origin, axis, limit });
+		robot.joints.insert(UrdfJoint {
+			name, type, parent, child, origin, axis, limit});
 	}
 
 	return robot;

@@ -7,3 +7,4 @@
 #include "cylinderzshape.h"
 #include "inflatedconvexhullshape.h"
 #include "visualmeshshape.h"
+#include "referenceshape.h"

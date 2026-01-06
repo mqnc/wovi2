@@ -156,6 +156,8 @@ public:
 
 		bulletObject.setCollisionShape(
 			collisionShape->getBulletShape());
+
+        bulletObject.setUserPointer(this);
 	}
 
 	void setParent(Part* newParent) {

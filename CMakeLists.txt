@@ -51,10 +51,12 @@ add_executable(main
     src/collision/shapes/cylinderzshape.cpp
     src/collision/shapes/boxshape.cpp
     src/collision/shapes/inflatedconvexhullshape.cpp
-    src/collision/shapes/shape.cpp
     src/collision/shapes/visualmeshshape.cpp
+    src/collision/shapes/referenceshape.cpp
+    src/collision/shapes/shape.cpp
     src/kinematics/ur/urkin.cpp
     src/thirdparty/tinyxml2/tinyxml2.cpp
+    src/scenevis/shapestojson.cpp
     src/main.cpp
 )
 target_compile_definitions(main

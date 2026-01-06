@@ -35,111 +35,107 @@ PartDescriptor partDescriptorFromUrdf(
 	auto linkCollisionShape = make_unique<collision::CompoundShape>();
 	auto linkVisualShape = make_unique<collision::CompoundShape>();
 
-	for (const auto& geom: link.collisionGeometries) {
+	for (const auto section: {&link.collisionGeometries, &link.visualGeometries}) {
+		for (const auto& geom: *section) {
 
-		auto jointToGeom = btTransformFromUrdf(geom.origin);
-		unique_ptr<collision::Shape> collisionChildShape;
-		unique_ptr<collision::Shape> visualChildShape;
+			auto jointToGeom = btTransformFromUrdf(geom.origin);
+			unique_ptr<collision::Shape> childShape;
 
-		if (geom.type == "box") {
-			collisionChildShape = make_unique<collision::BoxShape>(
-				geom.size[0], geom.size[1], geom.size[2]);
-			visualChildShape = make_unique<collision::BoxShape>(
-				geom.size[0], geom.size[1], geom.size[2]);
-		}
-		else if (geom.type == "sphere") {
-			collisionChildShape = make_unique<collision::SphereShape>(geom.radius);
-			visualChildShape = make_unique<collision::SphereShape>(geom.radius);
-		}
-		else if (geom.type == "cylinder") {
-			collisionChildShape = make_unique<collision::CylinderZShape>(
-				geom.radius, geom.length);
-			visualChildShape = make_unique<collision::CylinderZShape>(
-				geom.radius, geom.length);
-		}
-		else if (geom.type == "mesh") {
-
-			string file = geom.filename;
-			assert(meshSources.count(file));
-			string source = meshSources.at(file);
-
-			stl_reader::StlMesh<double, unsigned int> mesh(source);
-
-			// extract vertices
-			vector<btVector3> vertices;
-			for (size_t ivrt = 0; ivrt < mesh.num_vrts(); ivrt++) {
-				auto* v = mesh.vrt_coords(ivrt);
-				vertices.push_back(btVector3(v[0], v[1], v[2]));
+			if (geom.type == "box") {
+				childShape = make_unique<collision::BoxShape>(
+					geom.size[0], geom.size[1], geom.size[2]);
 			}
-
-			// extract faces
-			vector<array<unsigned int, 3>> faces;
-			for (size_t itri = 0; itri < mesh.num_tris(); itri++) {
-				faces.push_back({
-					mesh.tri_corner_ind(itri, 0),
-					mesh.tri_corner_ind(itri, 1),
-					mesh.tri_corner_ind(itri, 2)});
+			else if (geom.type == "sphere") {
+				childShape = make_unique<collision::SphereShape>(geom.radius);
 			}
+			else if (geom.type == "cylinder") {
+				childShape = make_unique<collision::CylinderZShape>(
+					geom.radius, geom.length);
+			}
+			else if (geom.type == "mesh" && section == &link.collisionGeometries) {
 
-			// determine if mesh is convex
-			// convex if all mesh vrtices are on the same side of all faces
-			// (side as in side of the 3d plane that the face is a part of)
-			bool isConvex = true;
-			for (const auto& face: faces) {
-				auto v0 = vertices[face[0]];
-				auto v1 = vertices[face[1]];
-				auto v2 = vertices[face[2]];
-				auto normal = (v1 - v0).cross(v2 - v0);
-				bool someCornersOnPositiveFaceSide = false;
-				bool someCornersOnNegativeFaceSide = false;
-				for (const auto& meshCorner: vertices) {
-					if (normal.dot(meshCorner - v0) > 1e-6) {
-						someCornersOnPositiveFaceSide = true;
-					}
-					if (normal.dot(meshCorner - v0) < -1e-6) {
-						someCornersOnNegativeFaceSide = true;
-					}
-					if (someCornersOnPositiveFaceSide && someCornersOnNegativeFaceSide) {
-						isConvex = false;
-						break;
-					}
+				string file = geom.filename;
+				assert(meshSources.count(file));
+				string source = meshSources.at(file);
+
+				stl_reader::StlMesh<double, unsigned int> mesh(source);
+
+				// extract vertices
+				vector<btVector3> vertices;
+				for (size_t ivrt = 0; ivrt < mesh.num_vrts(); ivrt++) {
+					auto* v = mesh.vrt_coords(ivrt);
+					vertices.push_back(btVector3(v[0], v[1], v[2]));
 				}
-				if (!isConvex) { break; }
-			}
 
-			// std::cout << geom.filename << " is " << (isConvex? "convex\n":"concave\n");
-
-			// create concave shape for visualization (and collision if concave)
-			auto triangles = make_shared<btTriangleMesh>();
-			for (const auto& face: faces) {
-				triangles->addTriangle(vertices[face[0]], vertices[face[1]], vertices[face[2]]);
-			}
-			auto concaveMesh = make_unique<collision::ConcaveTriangleMeshShape>(triangles);
-
-			if (isConvex) {
-				// create convex hull shape for collision
-				auto convexHull = make_unique<collision::InflatedConvexHullShape>(0);
-				for (const auto& v: vertices) {
-					convexHull->addPoint(v.x(), v.y(), v.z());
+				// extract faces
+				vector<array<unsigned int, 3>> faces;
+				for (size_t itri = 0; itri < mesh.num_tris(); itri++) {
+					faces.push_back({
+						mesh.tri_corner_ind(itri, 0),
+						mesh.tri_corner_ind(itri, 1),
+						mesh.tri_corner_ind(itri, 2)});
 				}
-				convexHull->optimize();
-				visualChildShape = std::move(concaveMesh);
-				collisionChildShape = std::move(convexHull);
+
+				// determine if mesh is convex
+				// convex if all mesh vrtices are on the same side of all faces
+				// (side as in side of the 3d plane that the face is a part of)
+				bool isConvex = true;
+				for (const auto& face: faces) {
+					auto v0 = vertices[face[0]];
+					auto v1 = vertices[face[1]];
+					auto v2 = vertices[face[2]];
+					auto normal = (v1 - v0).cross(v2 - v0);
+					bool someCornersOnPositiveFaceSide = false;
+					bool someCornersOnNegativeFaceSide = false;
+					for (const auto& meshCorner: vertices) {
+						if (normal.dot(meshCorner - v0) > 1e-6) {
+							someCornersOnPositiveFaceSide = true;
+						}
+						if (normal.dot(meshCorner - v0) < -1e-6) {
+							someCornersOnNegativeFaceSide = true;
+						}
+						if (someCornersOnPositiveFaceSide && someCornersOnNegativeFaceSide) {
+							isConvex = false;
+							break;
+						}
+					}
+					if (!isConvex) { break; }
+				}
+
+				// std::cout << geom.filename << " is " << (isConvex? "convex\n":"concave\n");
+
+				if (isConvex) {
+					auto convexHull = make_unique<collision::InflatedConvexHullShape>(0);
+					for (const auto& v: vertices) {
+						convexHull->addPoint(v.x(), v.y(), v.z());
+					}
+					convexHull->optimize();
+					childShape = std::move(convexHull);
+				}
+				else {
+					auto triangles = make_shared<btTriangleMesh>();
+					for (const auto& face: faces) {
+						triangles->addTriangle(vertices[face[0]], vertices[face[1]], vertices[face[2]]);
+					}
+					auto concaveMesh = make_unique<collision::ConcaveTriangleMeshShape>(triangles);
+					childShape = std::move(concaveMesh);
+				}
 			}
+            else if (geom.type == "mesh" && section == &link.visualGeometries){
+                childShape = make_unique<collision::ReferenceShape>(geom.filename);
+            }
 			else {
-				visualChildShape = concaveMesh->clone();
-				collisionChildShape = std::move(concaveMesh);
+				throw runtime_error("collision shape "s + geom.type + " not supported");
 			}
-		}
-		else {
-			throw runtime_error("collision shape "s + geom.type + " not supported");
-		}
 
-		if (collisionChildShape) {
-			linkCollisionShape->addShape(jointToGeom, std::move(collisionChildShape));
-		}
-		if (visualChildShape) {
-			linkVisualShape->addShape(jointToGeom, std::move(visualChildShape));
+			if (childShape) {
+				if (section == &link.collisionGeometries) {
+					linkCollisionShape->addShape(jointToGeom, std::move(childShape));
+				}
+				else {
+					linkVisualShape->addShape(jointToGeom, std::move(childShape));
+				}
+			}
 		}
 	}
 

@@ -15,8 +15,8 @@ public:
 	ConcaveTriangleMeshShape(ConcaveTriangleMeshShape&& other) noexcept; // move constructor
 	unique_ptr<Shape> clone() const override;
 	btGImpactMeshShape* getBulletShape() override;
-	size_t getNumTriangles();
-	std::vector<btTriangleShapeEx> getTriangles();
+	size_t getNumTriangles() const;
+	std::vector<btTriangleShapeEx> getTriangles() const;
 	void setSafetyMargin(double margin) override;
 	double getSafetyMargin() const override;
 };

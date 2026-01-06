@@ -28,15 +28,64 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
         import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+        import { ConvexHull } from 'three/addons/math/ConvexHull.js';
 
 
+        export function jsonToAxis(json) {
+            if (json == "x") { return new THREE.Vector3(1, 0, 0) }
+            else if (json == "y") { return new THREE.Vector3(0, 1, 0) }
+            else if (json == "z") { return new THREE.Vector3(0, 0, 1) }
+            else { return jsonToVector(json).normalize() }
+        }
+
+        export function jsonToVector(json) {
+            console.assert(Array.isArray(json) && json.length == 3)
+            return new THREE.Vector3(json[0], json[1], json[2])
+        }
+
+        export function jsonToQuaternion(json, order) {
+            console.assert(Array.isArray(json) && json.length == 4)
+            if (order === "xyzw") {
+                return new THREE.Quaternion(json[0], json[1], json[2], json[3])
+            }
+            else if (order === "wxyz") {
+                return new THREE.Quaternion(json[1], json[2], json[3], json[0])
+            }
+            else { throw new Error("invalid quaternion order") }
+        }
+
+
+        class ConvexGeometry2 extends THREE.BufferGeometry {
+            // modified from this: https://github.com/mrdoob/three.js/blob/master/examples/jsm/geometries/ConvexGeometry.js
+            // uses setFromObject instead of setFromPoints
+            constructor(obj) {
+                super();
+                const vertices = [];
+                const normals = [];
+                const convexHull = new ConvexHull().setFromObject(obj);
+                const faces = convexHull.faces;
+                for (let i = 0; i < faces.length; i++) {
+                    const face = faces[i];
+                    let edge = face.edge;
+                    do {
+                        const point = edge.head().point;
+                        vertices.push(point.x, point.y, point.z);
+                        normals.push(face.normal.x, face.normal.y, face.normal.z);
+                        edge = edge.next;
+                    } while (edge !== face.edge);
+                }
+                this.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                this.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+            }
+        }
 
         class DepthPeelingRenderer {
 
             constructor(parameters) {
                 const {
-                    layers = 5,
+                    layers = 20,
                     samples = 0,
                     colorSpace = THREE.SRGBColorSpace,
                     depthBuffer = true,
@@ -300,41 +349,381 @@
             };
         }
 
-        const DepthPeelMaterial = DepthPeelMaterialMixin(THREE.MeshStandardMaterial);
+
+        export function checkFields(obj, requiredKeys, optionalKeys = []) {
+            const objKeys = Object.keys(obj)
+
+            const missingRequiredFields = requiredKeys.filter(key => !objKeys.includes(key))
+            if (missingRequiredFields.length > 0) {
+                console.error(obj, "misses required", missingRequiredFields)
+                throw new Error("see above")
+            }
+
+            if (optionalKeys !== "*") {
+                const unexpectedFields = objKeys.filter(key => !requiredKeys.includes(key) && !optionalKeys.includes(key))
+                if (unexpectedFields.length > 0) {
+                    console.error(obj, "contains unexpected", unexpectedFields)
+                    throw new Error("see above")
+                }
+            }
+        }
+
+
+        export const haloVertexShader = `
+            varying vec3 nml;
+            varying vec3 pos;
+
+            void main() {
+                pos = (modelMatrix * vec4(position, 1.0)).xyz;
+                nml = (modelMatrix * vec4(normal, 0.0)).xyz;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+            }
+        `
+        export const haloFragmentShader = `
+            uniform vec3 glowColor;
+            varying vec3 pos;
+            varying vec3 nml;
+            void main() {
+                vec3 view = normalize(pos-cameraPosition);
+                float intensity = 0.1 + 0.9 * pow(1.0 - abs(dot(normalize(nml), view)), 3.0);
+                //gl_FragColor = vec4( glowColor, 0.9 * intensity + 0.1 );
+                gl_FragColor = vec4( glowColor, intensity );
+            }
+        `
+
+        const depthPeelShaderMaterial = DepthPeelMaterialMixin(THREE.ShaderMaterial)
+
+        // const coreMaterial = new THREE.MeshStandardMaterial({
+        // 	roughness: 0.8,
+        // 	metalness: 0.2,
+        // })
+        export let coreMaterial = new depthPeelShaderMaterial({
+            uniforms: {
+                glowColor: { value: new THREE.Color(0.584, 0.059, 0.329) },
+            },
+            vertexShader: haloVertexShader,
+            fragmentShader: haloFragmentShader,
+            transparent: true
+        });
+        export function setCoreMaterial(material) { coreMaterial = material }
+
+        export let marginMaterial = new depthPeelShaderMaterial({
+            uniforms: {
+                glowColor: { value: new THREE.Color(0, 0.408, 0.459) },
+            },
+            vertexShader: haloVertexShader,
+            fragmentShader: haloFragmentShader,
+            side: THREE.BackSide,
+            transparent: true
+        });
+        export function setMarginMaterial(material) { marginMaterial = material }
+
+        let numCircleCorners = 20, icoDetail, sphereTemplateGeometry
+        icoDetail = Math.floor(numCircleCorners / 5 - 1)
+        sphereTemplateGeometry = new THREE.IcosahedronGeometry(1, icoDetail)
+        export let sphereTemplate = new THREE.Mesh(sphereTemplateGeometry)
+
+        export function setCurvatureSmoothness(newNumCircleCorners) {
+            numCircleCorners = newNumCircleCorners
+            icoDetail = Math.floor(numCircleCorners / 5 - 1)
+            sphereTemplateGeometry = new THREE.IcosahedronGeometry(1, icoDetail)
+            sphereTemplate = new THREE.Mesh(sphereTemplateGeometry)
+        }
+        setCurvatureSmoothness(numCircleCorners)
+
+        let origin = { xyz: [0, 0, 0], qxyzw: [0, 0, 0, 1] }
+
+        const commonShapeKeys = ["margin", "collides", "stickyForce", "visuals"]
+
+        export function jsonToShapeObject(json, shapeId) {
+            checkFields(json, ["kind"], [...commonShapeKeys,
+                "center", "radius", "pose", "size", "height", "axis", "points", "vertices", "faces"])
+
+            switch (json.kind) {
+                case "box": return jsonToBoxObject(json, shapeId)
+                case "sphere": return jsonToSphereObject(json, shapeId)
+                case "cylinder": return jsonToCylinderObject(json, shapeId)
+                case "orangeNet": return jsonToOrangeNetObject(json, shapeId)
+                case "mesh": // return parseMesh(json)
+                default: throw new Error("unhandled shape type: " + json.kind)
+            }
+        }
+
+        function makeOrangeNetGeometry(points, radius) {
+            let helper = new THREE.Group()
+            for (const p of points) {
+                let s = sphereTemplate.clone()
+                s.position.set(p[0], p[1], p[2])
+                const r = radius
+                s.scale.set(r, r, r)
+                helper.add(s)
+            }
+            let geometry = new ConvexGeometry2(helper)
+            geometry.computeVertexNormals()
+            return geometry
+        }
+
+        function jsonToBoxObject(json, shapeId) {
+            checkFields(json, ["kind", "size"], [...commonShapeKeys, "pose"])
+
+            let result = new THREE.Group()
+            result.name = shapeId
+            let coreGeometry = new THREE.BoxGeometry(json.size[0], json.size[1], json.size[2])
+            let coreMesh = new THREE.Mesh(coreGeometry, coreMaterial.clone())
+            coreMesh.name = "core"
+            result.add(coreMesh)
+            let margin = json.margin ?? 0
+            let marginGeometry
+            if (margin == 0) {
+                marginGeometry = coreGeometry.clone()
+            }
+            else {
+                let [w2, h2, d2] = [json.size[0] / 2, json.size[1] / 2, json.size[2] / 2]
+                marginGeometry = makeOrangeNetGeometry([
+                    [-w2, -h2, -d2], [-w2, -h2, d2], [-w2, h2, -d2], [-w2, h2, d2],
+                    [w2, -h2, -d2], [w2, -h2, d2], [w2, h2, -d2], [w2, h2, d2]
+                ], margin)
+            }
+            let marginMesh = new THREE.Mesh(marginGeometry, marginMaterial.clone())
+            marginMesh.name = "margin"
+            result.add(marginMesh)
+            result.matrixAutoUpdate = false
+            return result
+        }
+
+        function jsonToSphereObject(json, shapeId) {
+            checkFields(json, ["kind", "radius"], [...commonShapeKeys, "center"])
+
+            let result = new THREE.Group()
+            result.name = shapeId
+            let coreMesh = sphereTemplate.clone()
+            coreMesh.name = "core"
+            coreMesh.material = coreMaterial.clone()
+            let r = json.radius
+            coreMesh.scale.set(r, r, r)
+            result.add(coreMesh)
+            let marginMesh = sphereTemplate.clone()
+            marginMesh.name = "margin"
+            marginMesh.material = marginMaterial.clone()
+            r = json.radius + json.margin
+            marginMesh.scale.set(r, r, r)
+            result.add(marginMesh)
+            result.position.copy(jsonToVector(json.center ?? [0, 0, 0]))
+            return result
+        }
+
+        function jsonToOrangeNetObject(json, shapeId) {
+            checkFields(json, ["kind", "points", "radius"], commonShapeKeys)
+
+            let result = new THREE.Group()
+            result.name = shapeId
+            let coreGeometry = makeOrangeNetGeometry(json.points, json.radius)
+            let coreMesh = new THREE.Mesh(coreGeometry, coreMaterial.clone())
+            coreMesh.name = "core"
+            result.add(coreMesh)
+            let margin = json.margin ?? 0
+            let marginGeometry = makeOrangeNetGeometry(json.points, json.radius + margin)
+            let marginMesh = new THREE.Mesh(marginGeometry, marginMaterial.clone())
+            marginMesh.name = "margin"
+            result.add(marginMesh)
+            return result
+        }
+
+        function jsonToCylinderObject(json, shapeId) {
+            checkFields(json, ["kind", "radius", "height", "axis"], [...commonShapeKeys, "center"])
+
+            let poseHelper = new THREE.Group()
+            poseHelper.name = "helper"
+            let coreGeometry = new THREE.CylinderGeometry(json.radius, json.radius, json.height, numCircleCorners)
+            let coreMesh = new THREE.Mesh(coreGeometry, coreMaterial.clone())
+            coreMesh.name = "core"
+            coreMesh.rotation.x = Math.PI / 2
+            poseHelper.add(coreMesh)
+            let margin = json.margin ?? 0
+            if (margin == 0) {
+                let marginGeometry = coreGeometry.clone()
+                let marginMesh = new THREE.Mesh(marginGeometry, marginMaterial.clone())
+                marginMesh.name = "margin"
+                marginMesh.rotation.x = Math.PI / 2
+                poseHelper.add(marginMesh)
+            }
+            else {
+                let helper = new THREE.Group()
+                let torusGeometry = new THREE.TorusGeometry(json.radius, margin, numCircleCorners, numCircleCorners)
+                let torus1 = new THREE.Mesh(torusGeometry)
+                let torus2 = torus1.clone()
+                torus1.position.setZ(json.height / 2)
+                torus2.position.setZ(-json.height / 2)
+                helper.add(torus1)
+                helper.add(torus2)
+                let marginGeometry = new ConvexGeometry2(helper)
+                marginGeometry.computeVertexNormals()
+                let marginMesh = new THREE.Mesh(marginGeometry, marginMaterial.clone())
+                marginMesh.name = "margin"
+                poseHelper.add(marginMesh)
+            }
+
+
+            poseHelper.matrix.multiply(new THREE.Matrix4().lookAt(
+                new THREE.Vector3(0, 0, 0),
+                jsonToAxis(json.axis),
+                new THREE.Vector3(0, 0, 1)
+            )).setPosition(jsonToVector(json.center ?? [0, 0, 0]))
+
+            let result = new THREE.Group()
+            result.name = shapeId
+            result.add(poseHelper)
+
+            return result
+        }
+
+
+
+
+
+        function shapeDataToMeshes(data) {
+            switch (data.kind) {
+                case "Compound": {
+                    let result = new THREE.Group()
+                    for (const child of data.children) {
+                        let meshes = shapeDataToMeshes(child.shape)
+                        meshes.position.set(...child.trafo.xyz)
+                        meshes.quaternion.set(...child.trafo.qxyzw)
+                        result.add(meshes)
+                    }
+                    return result;
+                }
+                case "Box":
+                    let box = jsonToShapeObject({
+                        kind: "box",
+                        size: data.size,
+                        margin: data.margin
+                    })
+                    box.matrixAutoUpdate = true
+                    return box
+                case "Sphere": {
+                    let result = new THREE.Group()
+                    let coreMesh = sphereTemplate.clone()
+                    coreMesh.material = coreMaterial.clone()
+                    let r = data.radius
+                    coreMesh.scale.set(r, r, r)
+                    result.add(coreMesh)
+                    let marginMesh = sphereTemplate.clone()
+                    marginMesh.material = marginMaterial.clone()
+                    r = data.radius + data.margin
+                    marginMesh.scale.set(r, r, r)
+                    result.add(marginMesh)
+                    return result;
+                }
+                case "CylinderZ":
+                    let cylinder = jsonToShapeObject({
+                        kind: "cylinder",
+                        radius: data.radius,
+                        height: data.height,
+                        axis: "z",
+                        margin: data.margin
+                    })
+                    return cylinder
+                case "InflatedConvexHull": {
+                    let result = new THREE.Group()
+                    let helper = new THREE.Group()
+                    for (const p of data.points) {
+                        let s = sphereTemplate.clone()
+                        s.position.set(p[0], p[1], p[2])
+                        const r = data.radius
+                        s.scale.set(r, r, r)
+                        helper.add(s)
+                    }
+                    let coreGeometry = new ConvexGeometry2(helper)
+                    coreGeometry.computeVertexNormals()
+                    let coreMesh = new THREE.Mesh(coreGeometry)
+                    coreMesh.material = coreMaterial.clone()
+                    result.add(coreMesh)
+                    for (const s of helper.children) {
+                        const r = data.radius + data.margin
+                        s.scale.set(r, r, r)
+                    }
+                    let marginGeometry = new ConvexGeometry2(helper)
+                    let marginMesh = new THREE.Mesh(marginGeometry)
+                    marginMesh.material = marginMaterial.clone()
+                    result.add(marginMesh)
+                    return result;
+                }
+                case "ReferenceMesh":
+                    const loader = new ColladaLoader();
+                    let handle = new THREE.Group()
+                    loader.load(data.path,
+                        (result) => {
+                            result.scene.rotateX(Math.PI / 2)
+                            handle.add(result.scene);
+                        },
+                        () => { },
+                        (error) => {
+                            console.log(error)
+                        }
+                    );
+                    return handle
+                // case "MultiSphere":
+                // 	break;
+                // case "VisualMesh":
+                // 	break;
+                default:
+                    console.error("unknown shape kind: " + data.kind)
+            }
+        }
+
+
+
+
+        const DepthPeelStandardMaterial = DepthPeelMaterialMixin(THREE.MeshStandardMaterial);
 
         const scene = new THREE.Scene();
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(3, 3, 3);
         camera.up.set(0, 0, 1);
 
         const renderer = new DepthPeelingRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0x123456, 1);
+        renderer.setClearColor(0x000000, 1);
         document.body.appendChild(renderer.domElement);
 
-        const loader = new GLTFLoader()
-        loader.load(
-            "models_/ur5e.glb",
-            function (gltf) { scene.add(gltf.scene) },
-            function (xhr) {
-                // console.log((xhr.loaded / xhr.total * 100) + '% loaded')
-            },
-            function (error) {
-                console.error('error loading ' + path)
-                reject()
-            }
-        )
+        // const loader = new GLTFLoader()
+        // loader.load(
+        //     "models_/ur5e.glb",
+        //     function (gltf) { scene.add(gltf.scene) },
+        //     function (xhr) {
+        //         // console.log((xhr.loaded / xhr.total * 100) + '% loaded')
+        //     },
+        //     function (error) {
+        //         console.error('error loading ' + path)
+        //         reject()
+        //     }
+        // )
 
         const pmremGenerator = new THREE.PMREMGenerator(renderer);
         pmremGenerator.compileCubemapShader()
         const cubeLoader = new THREE.CubeTextureLoader();
-        let textureCube = cubeLoader.load([`bg.jpg`, `bg.jpg`, `bg.jpg`, `bg.jpg`, `bg.jpg`, `bg.jpg`], function (texture) {
+        let textureCube = cubeLoader.load([
+            `background/environment.jpg`,
+            `background/environment.jpg`,
+            `background/environment.jpg`,
+            `background/environment.jpg`,
+            `background/environment.jpg`,
+            `background/environment.jpg`
+        ], function (texture) {
             let pmrem = pmremGenerator.fromCubemap(texture)
             scene.environment = pmrem.texture;
         });
 
-        let textureCube2 = cubeLoader.load([`bg2.jpg`, `bg2.jpg`, `bg2.jpg`, `bg2.jpg`, `bg2.jpg`, `bg2.jpg`], function (texture) {
+        let textureCube2 = cubeLoader.load([
+            `background/px.jpg`,
+            `background/nx.jpg`,
+            `background/py.jpg`,
+            `background/ny.jpg`,
+            `background/pz.jpg`,
+            `background/nz.jpg`
+        ], function (texture) {
             let pmrem = pmremGenerator.fromCubemap(texture)
             scene.background = pmrem.texture;
         });
@@ -346,16 +735,29 @@
         const tcp = new THREE.AxesHelper(0.1)
         tcp.position.set(-0.5, -0.1, 0.2)
         scene.add(tcp)
-        const gizmo = new TransformControls(camera, renderer.domElement)
 
+
+        const gizmo = new TransformControls(camera, renderer.domElement)
         gizmo.addEventListener('dragging-changed', function (event) {
             controls.enabled = !event.value;
         });
         gizmo.attach(tcp);
         gizmo.setMode("rotate")
         gizmo.space = "local"
-        const gizmoHelper = gizmo.getHelper();
-        scene.add(gizmoHelper);
+        gizmo.setSize(0.4)
+        scene.add(gizmo.getHelper());
+
+        document.addEventListener("keydown", (e) => {
+            if (e.repeat) return;
+
+            switch (e.key) {
+                case "t": gizmo.setMode("translate"); break;
+                case "r": gizmo.setMode("rotate"); break;
+                case "l": gizmo.space = "local"; break;
+                case "g": gizmo.space = "global"; break;
+                case "Escape": break;
+            }
+        });
 
         scene.add(new THREE.AxesHelper(1));
 
@@ -369,7 +771,17 @@
 
         const geometry = new THREE.BufferGeometry();
 
-        const forceFieldMaterial = new DepthPeelMaterial({ transparent: true, opacity: 0.5, color: 0x00ff00, side: THREE.DoubleSide });
+        //const forceFieldMaterial = new DepthPeelStandardMaterial({ transparent: true, opacity: 0.5, color: 0x00ff00, side: THREE.DoubleSide });
+        const forceFieldMaterial = new depthPeelShaderMaterial({
+            uniforms: {
+                glowColor: { value: new THREE.Color(0.3, 1, 0) },
+            },
+            vertexShader: haloVertexShader,
+            fragmentShader: haloFragmentShader,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+
 
         const mesh1 = new THREE.Mesh(geometry, forceFieldMaterial);
         //const mesh2 = new THREE.Mesh(geometry, material2);
@@ -380,36 +792,72 @@
         //const ws = { send: () => { } }
         ws.binaryType = 'arraybuffer';
 
+        let setUp = false;
+
         ws.onmessage = (ev) => {
-            const buf = ev.data;
-            const view = new DataView(buf);
-            let o = 0;
 
-            const vcount = view.getUint32(o, true); o += 4;
-            const icount = view.getUint32(o, true); o += 4;
+            if (typeof ev.data == "string") {
+                // json -> scene visualization, shapes and poses of objects
 
-            const positions = new Float32Array(buf, o, vcount * 3);
-            o += vcount * 3 * 4;
+                const json = JSON.parse(ev.data);
 
-            const normals = new Float32Array(buf, o, vcount * 3);
-            o += vcount * 3 * 4;
+                console.log(json)
 
-            const indices = new Uint32Array(buf, o, icount);
+                if (!setUp && !json.__isUpdate__) {
+                    for (let objData of json) {
+                        let obj = shapeDataToMeshes(objData.shape)
+                        obj.name = objData.name
+                        obj.position.set(...objData.trafo.xyz)
+                        obj.quaternion.set(...objData.trafo.qxyzw)
+                        scene.add(obj)
+                        let vis = shapeDataToMeshes(objData.visual)
+                        obj.add(vis)
+                    }
+                    setUp = true
+                }
+                if (setUp && json.__isUpdate__) {
+                    for (const [objectName, trafo] of Object.entries(json)) {
+                        if (objectName[0] == "_") { continue }
+                        const obj = scene.getObjectByName(objectName)
+                        obj.position.set(...trafo.xyz)
+                        obj.quaternion.set(...trafo.qxyzw)
+                    }
+                }
+            }
+            else {
+                // binary -> workspace visualization, mesh data from marching cubes
+                const buf = ev.data;
+                const view = new DataView(buf);
+                let o = 0;
 
-            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-            geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-            geometry.computeBoundingSphere();
+                const vcount = view.getUint32(o, true); o += 4;
+                const icount = view.getUint32(o, true); o += 4;
+
+                const positions = new Float32Array(buf, o, vcount * 3);
+                o += vcount * 3 * 4;
+
+                const normals = new Float32Array(buf, o, vcount * 3);
+                o += vcount * 3 * 4;
+
+                const indices = new Uint32Array(buf, o, icount);
+
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+                geometry.computeBoundingSphere();
+            }
         };
 
         let lastState = ""
-        window.setInterval(() => {
-            let state = tcp.matrixWorld.clone().transpose().elements.join(",")
-            if (state != lastState) {
-                ws.send(state)
-                lastState = state
-            }
-        }, 50)
+        ws.onopen = (ev) => {
+            window.setInterval(() => {
+                let state = tcp.matrixWorld.clone().transpose().elements.join(",")
+                if (state != lastState || !setUp) {
+                    ws.send(state)
+                    lastState = state
+                }
+            }, 50)
+        }
 
         function animate() {
             requestAnimationFrame(animate);

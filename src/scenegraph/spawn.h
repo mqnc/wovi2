@@ -18,6 +18,7 @@ void spawn(
     Scene& scene,
 	const string& object_id,
 	const string& description_file,
+    const vector<pair<string, string>>& path_replacements,
 	const Pose& pose,
 	const valarray<double>& joint_positions,
 	const string& parent_object_id,

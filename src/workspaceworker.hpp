@@ -53,10 +53,13 @@ void blur3D(std::vector<MC::MC_FLOAT>& f, int nx, int ny, int nz) {
 	}
 }
 
-void worker(
+void workspaceWorker(
 	const Sampling& sampling,
+	std::atomic<bool>& setupNeeded,
 	const std::atomic<uint64_t>& latestRequestId,
 	const std::array<double, 12>& sharedPose,
+	std::function<void(const double[12])> setupVisualization,
+	std::function<void(const double[12])> updateVisualization,
 	std::function<float(const double[12])> score,
 	std::function<void(const std::vector<char>&)> send
 ) {
@@ -64,7 +67,7 @@ void worker(
 
 	while (true) {
 		uint64_t currentRequestId = latestRequestId.load();
-		if (currentRequestId == lastHandled) {
+		if (currentRequestId == lastHandled || currentRequestId == 0) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 			continue;
 		}
@@ -76,6 +79,14 @@ void worker(
 		};
 
 		auto pose = sharedPose;
+
+        if(setupNeeded.load()){
+            setupVisualization(pose.data());
+            setupNeeded.store(false);
+        }
+        else{
+            updateVisualization(pose.data());
+        }
 
 		for (float f: sampling.resampleFactors) {
 

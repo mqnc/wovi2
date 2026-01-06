@@ -44,11 +44,11 @@ btGImpactMeshShape* ConcaveTriangleMeshShape::getBulletShape() {
 	return &bulletShape;
 }
 
-size_t ConcaveTriangleMeshShape::getNumTriangles() {
+size_t ConcaveTriangleMeshShape::getNumTriangles() const {
 	return mesh->getNumTriangles();
 }
 
-std::vector<btTriangleShapeEx> ConcaveTriangleMeshShape::getTriangles() {
+std::vector<btTriangleShapeEx> ConcaveTriangleMeshShape::getTriangles() const {
 	std::vector<btTriangleShapeEx> result;
 	result.reserve(getNumTriangles());
 	bulletShape.getMeshPart(0)->lockChildShapes();

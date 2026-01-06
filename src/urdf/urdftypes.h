@@ -9,7 +9,7 @@ struct UrdfTrafo {
 	valarray<double> rpy{ 0,0,0 };
 };
 
-struct UrdfCollisionGeometry {
+struct UrdfGeometry {
 	string type;
 	UrdfTrafo origin;
 	valarray<double> size;
@@ -21,7 +21,8 @@ struct UrdfCollisionGeometry {
 
 struct UrdfLink {
 	const string name;
-	vector<UrdfCollisionGeometry> collisionGeometries;
+	vector<UrdfGeometry> collisionGeometries;
+	vector<UrdfGeometry> visualGeometries;
 };
 
 struct UrdfJoint {

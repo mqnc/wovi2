@@ -1,6 +1,7 @@
 
 #include "spawn.h"
 #include "bullet3/src/LinearMath/btTransform.h"
+#include "str.h"
 
 btTransform btTransformFromPose(const Pose& pose) {
 	size_t qnans = isnan(pose.qx) + isnan(pose.qy)
@@ -15,9 +16,10 @@ btTransform btTransformFromPose(const Pose& pose) {
 }
 
 void spawn(
-    Scene& scene,
+	Scene& scene,
 	const string& object_id,
 	const string& description_file,
+	const vector<pair<string, string>>& path_replacements,
 	const Pose& pose,
 	const valarray<double>& joint_positions,
 	const string& parent_object_id,
@@ -38,16 +40,23 @@ void spawn(
 	vector<string> actuatedJoints = urdf.defaultJointSelection;
 
 	Dict<string> meshSources = {};
-	for (const auto& link: urdf.links) {
-		for (const auto& geom: link.collisionGeometries) {
-			const auto& f = geom.filename;
+	for (auto& link: urdf.links) {
+		for (auto& geom: link.collisionGeometries) {
+			auto& f = geom.filename;
 			if (f != "") {
+				str::replaceInplace(f, path_replacements);
 				if (std::filesystem::path(f).is_absolute()) {
 					meshSources[f] = scene.loadFile(f, true);
 				}
 				else {
 					meshSources[f] = scene.loadFile(dir / f, true);
 				}
+			}
+		}
+		for (auto& geom: link.visualGeometries) {
+			auto& f = geom.filename;
+			if (f != "") {
+				str::replaceInplace(geom.filename, path_replacements);
 			}
 		}
 	}
