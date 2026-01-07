@@ -7,12 +7,12 @@
     </inertial>
     <visual>
       <geometry>
-        <box size=".5 .5 .5"/>
+        <mesh filename="cocube.glb"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <box size=".5 .5 .5"/>
+        <box size=".7 .7 .7"/>
       </geometry>
     </collision>
   </link>

@@ -7,12 +7,12 @@
     </inertial>
     <visual>
       <geometry>
-        <box size=".1 .1 .1"/>
+        <mesh filename="rubik.glb"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <box size=".1 .1 .1"/>
+        <box size=".065 .065 .065"/>
       </geometry>
     </collision>
   </link>

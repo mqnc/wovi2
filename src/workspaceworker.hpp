@@ -57,7 +57,8 @@ void workspaceWorker(
 	const Sampling& sampling,
 	std::atomic<bool>& setupNeeded,
 	const std::atomic<uint64_t>& latestRequestId,
-	const std::array<double, 12>& sharedPose,
+	const std::array<double, 12>& sharedTcpPose,
+	std::function<void(void)> updatePoses,
 	std::function<void(const double[12])> setupVisualization,
 	std::function<void(const double[12])> updateVisualization,
 	std::function<float(const double[12])> score,
@@ -72,21 +73,23 @@ void workspaceWorker(
 			continue;
 		}
 
+		updatePoses();
+
 		bool firstIteration = true;
 
 		auto cancel = [&]() {
 			return latestRequestId.load() != currentRequestId && !firstIteration;
 		};
 
-		auto pose = sharedPose;
+		auto pose = sharedTcpPose;
 
-        if(setupNeeded.load()){
-            setupVisualization(pose.data());
-            setupNeeded.store(false);
-        }
-        else{
-            updateVisualization(pose.data());
-        }
+		if (setupNeeded.load()) {
+			setupVisualization(pose.data());
+			setupNeeded.store(false);
+		}
+		else {
+			updateVisualization(pose.data());
+		}
 
 		for (float f: sampling.resampleFactors) {
 
@@ -118,7 +121,9 @@ void workspaceWorker(
 
 			if (cancel()) break;
 
-			blur3D(field, xRes, yRes, zRes);
+			if (f > 1) {
+				blur3D(field, xRes, yRes, zRes);
+			}
 
 			MC::mcMesh mesh;
 			MC::marching_cube(field.data(), xRes, yRes, zRes, mesh);

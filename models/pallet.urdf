@@ -7,12 +7,12 @@
     </inertial>
     <visual>
       <geometry>
-        <box size="0.05 2 2"/>
+        <mesh filename="pallet.glb"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <box size="0.05 2 2"/>
+        <box size="1.2 0.8 0.144"/>
       </geometry>
     </collision>
   </link>

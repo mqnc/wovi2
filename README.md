@@ -31,3 +31,10 @@ Visualization:
 python3 -m http.server
 ```
 open `localhost:8000/viewer.html` in a browser
+
+# Credits
+
+[Weighted Companion Cube](https://sketchfab.com/3d-models/portal-weighted-companion-cube-b43c0c192a474374b325a997911754bf)
+[Rubik's Cube](https://sketchfab.com/3d-models/the-rubiks-cube-high-poly-by-smakologg-3527bfcda2e1492395142423021c3ff2)
+[Basket Ball](https://sketchfab.com/3d-models/basket-ball-6900606bf6be47bbac9cdca845074c66)
+[Pallet](https://sketchfab.com/3d-models/pallet-ad8768f522184364af70b56846d10fcf)

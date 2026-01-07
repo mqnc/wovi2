@@ -650,11 +650,20 @@
                     return result;
                 }
                 case "ReferenceMesh":
-                    const loader = new ColladaLoader();
+                    let loader
+                    if (data.path.toLowerCase().endsWith("dae")) {
+                        loader = new ColladaLoader();
+                    }
+                    else if (data.path.toLowerCase().endsWith("glb") || data.path.toLowerCase().endsWith("gltf")) {
+                        loader = new GLTFLoader();
+                    }
+                    else {
+                        throw new Error("unhandled file format: " + data.path);
+                    }
                     let handle = new THREE.Group()
                     loader.load(data.path,
                         (result) => {
-                            result.scene.rotateX(Math.PI / 2)
+                            result.scene.rotation.set(0, 0, 0)
                             handle.add(result.scene);
                         },
                         () => { },
@@ -678,6 +687,7 @@
         const DepthPeelStandardMaterial = DepthPeelMaterialMixin(THREE.MeshStandardMaterial);
 
         const scene = new THREE.Scene();
+        window.scene = scene
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(3, 3, 3);
@@ -734,6 +744,7 @@
 
         const tcp = new THREE.AxesHelper(0.1)
         tcp.position.set(-0.5, -0.1, 0.2)
+        tcp.quaternion.set(0, 1, 0, 0)
         scene.add(tcp)
 
 
@@ -755,8 +766,20 @@
                 case "r": gizmo.setMode("rotate"); break;
                 case "l": gizmo.space = "local"; break;
                 case "g": gizmo.space = "global"; break;
-                case "Escape": break;
+                case "Escape": gizmo.detach(); break;
+                case "e": gizmo.attach(tcp); break;
+                default:
+                    if (/^[0-9]$/.test(e.key)) {
+                        for (const obj of scene.children) {
+                            if (obj.name && obj.name == "__handle__" + e.key) {
+                                gizmo.attach(obj);
+                                break;
+                            }
+                        }
+                    }
             }
+
+
         });
 
         scene.add(new THREE.AxesHelper(1));
@@ -792,6 +815,9 @@
         //const ws = { send: () => { } }
         ws.binaryType = 'arraybuffer';
 
+        let handles = { "tcp": tcp };
+        let prevStates = {};
+
         let setUp = false;
 
         ws.onmessage = (ev) => {
@@ -812,7 +838,17 @@
                         scene.add(obj)
                         let vis = shapeDataToMeshes(objData.visual)
                         obj.add(vis)
+
+                        if (/^\d\./.test(obj.name)) { // does name start with digit and "."? -> make gizmo-movable
+                            let helper = new THREE.Object3D();
+                            helper.name = "__handle__" + obj.name[0];
+                            handles[obj.name[0]] = helper;
+                            scene.add(helper)
+                            helper.position.copy(obj.position)
+                            helper.quaternion.copy(obj.quaternion)
+                        }
                     }
+
                     setUp = true
                 }
                 if (setUp && json.__isUpdate__) {
@@ -848,16 +884,18 @@
             }
         };
 
-        let lastState = ""
-        ws.onopen = (ev) => {
-            window.setInterval(() => {
-                let state = tcp.matrixWorld.clone().transpose().elements.join(",")
-                if (state != lastState || !setUp) {
-                    ws.send(state)
-                    lastState = state
+        ws.onopen = () => {
+            setInterval(() => {
+                for (const [id, obj] of Object.entries(handles)) {
+                    const state = obj.matrixWorld.clone().transpose().elements.join(",");
+                    const last = prevStates[id];
+                    if (state !== last) {
+                        ws.send(`${id}:${state}`);
+                        prevStates[id] = state;
+                    }
                 }
-            }, 50)
-        }
+            }, 50);
+        };
 
         function animate() {
             requestAnimationFrame(animate);

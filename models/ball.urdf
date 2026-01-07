@@ -10,7 +10,7 @@
     </inertial>
     <visual>
       <geometry>
-        <sphere radius="0.12"/>
+        <mesh filename="ball.glb"/>
       </geometry>
     </visual>
     <collision>

@@ -24,22 +24,24 @@ std::array<std::array<double, 2>, 6> jointLimits = {{
 	{-3.14, 0.01},
 	{0.01, 3.14},
 	{-3.14, 3.14},
-	{0.01, 3.14},
+	{-3.14, -0.01},
 	{-3.14, 3.14}
 }};
 
-const int targetConfigId = 0;
+const int targetConfigId = 1;
 
 Sampling sampling {
-	-1.0, 1.0, 12,
-	-1.0, 1.0, 12,
-	-1.0f + (float) kine.d1, 1.0f + (float) kine.d1, 12,
-	{1, 2, 4, 8, 16}
+	-1.0, 1.0, 20,
+	-1.0, 1.0, 20,
+	-1.0f + (float) kine.d1, 1.0f + (float) kine.d1, 20,
+	{1, 2, 4, 8}
 };
 
 std::atomic<mg_connection*> sharedConn;
 std::atomic<bool> setupNeeded;
-std::array<double, 12> sharedPose;
+std::mutex posesMutex;
+std::map<string, std::array<double, 12>> sharedPoses;
+std::array<double, 12> sharedTcpPose;
 std::atomic<uint64_t> latestRequestId = 0;
 
 void sendBinary(const std::vector<char>& packet) {
@@ -79,12 +81,23 @@ public:
 		}
 
 		std::string s {data, len};
-		std::stringstream ss(s);
+
+		auto colon = s.find(':');
+		std::string id = s.substr(0, colon);
+		std::string poseData = s.substr(colon + 1);
+		std::stringstream ss(poseData);
+
+		std::array<double, 12> pose;
 
 		for (int i = 0; i < 12; ++i) {
 			std::string t;
 			std::getline(ss, t, ',');
-			sharedPose[i] = std::stod(t);
+			pose[i] = std::stod(t);
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(posesMutex);
+			sharedPoses[id] = pose;
 		}
 
 		sharedConn.store(conn);
@@ -125,9 +138,9 @@ int main() {
 		"robot",
 		// "/home/mirko/development/wovi2/models/ur5e/ur5e.urdf",
 		"/home/mirko/development/wovi2/models/ur/ur5e.urdf", {
-            {"package://ur_description/meshes/ur5e/collision", "meshes/ur5e/collision"},
-            {"package://ur_description/meshes/ur5e/visual", "models/ur/meshes/ur5e/visual"},
-        },
+			{"package://ur_description/meshes/ur5e/collision", "meshes/ur5e/collision"},
+			{"package://ur_description/meshes/ur5e/visual", "models/ur/meshes/ur5e/visual"},
+		},
 		{0, 0, 0, 0, 0, 1, 0}, // rotated by 180° so urdf (ros convention) lines up with ik (ur convention)
 		{0, 0, 0, 0, 0, 0},
 		"__world__",
@@ -136,18 +149,9 @@ int main() {
 
 	spawn(
 		scene,
-		"smallBox↔",
-		"/home/mirko/development/wovi2/models/box01.urdf", {},
-		{0.4, 0.4, 0.4},
-		{},
-		"__world__",
-		"origin"
-	);
-
-	spawn(
-		scene,
-		"bigBox↔",
-		"/home/mirko/development/wovi2/models/box05.urdf", {},
+		"1",
+		"/home/mirko/development/wovi2/models/rubik.urdf",
+		{{"rubik.glb", "models/rubik.glb"}},
 		{-0.4, 0.4, 0.4},
 		{},
 		"__world__",
@@ -156,23 +160,69 @@ int main() {
 
 	spawn(
 		scene,
-		"ball↔",
-		"/home/mirko/development/wovi2/models/ball.urdf", {},
-		{-0.4, -0.4, 0.4},
+		"2",
+		"/home/mirko/development/wovi2/models/cocube.urdf",
+		{{"cocube.glb", "models/cocube.glb"}},
+		{0.48, 0.0, 0.351},
 		{},
 		"__world__",
 		"origin"
 	);
 
-    spawn(
+	spawn(
 		scene,
-		"wall↔",
-		"/home/mirko/development/wovi2/models/wall.urdf", {},
-		{0.6, -0.4, 0.4},
+		"3",
+		"/home/mirko/development/wovi2/models/ball.urdf",
+		{{"ball.glb", "models/ball.glb"}},
+		{0, 0.6, 0},
 		{},
 		"__world__",
 		"origin"
 	);
+
+	spawn(
+		scene,
+		"4",
+		"/home/mirko/development/wovi2/models/panel.urdf",
+		{{"panel.glb", "models/panel.glb"}},
+		{0, -0.5, 1 - 0.075, M_SQRT1_2, 0, 0, M_SQRT1_2},
+		{},
+		"__world__",
+		"origin"
+	);
+
+	spawn(
+		scene,
+		"5",
+		"/home/mirko/development/wovi2/models/pallet.urdf",
+		{{"pallet.glb", "models/pallet.glb"}},
+		{0.2, 0.0, -0.075},
+		{},
+		"__world__",
+		"origin"
+	);
+
+    scene.getRobot("robot").setActuationState(true);
+
+
+	vector<string> passive;
+	for (const auto& [robotId, robot] : scene.robots) {
+		for (const auto& part : robot.getParts()) {
+			if (!robot.isActuated) {
+				passive.push_back(robotId + "." + part->linkId);
+			}
+		}
+	}
+
+    scene.collisionIgnoreGroupManager.createGroup("__passive__", passive);
+    scene.collisionIgnoreGroupManager.generateBitMasks();
+
+	for (auto& [robotId, robot] : scene.robots) {
+		for (auto& part : robot.getMutableParts()) {
+			part->collisionBitMask = scene.collisionIgnoreGroupManager.getBitMask(
+				robotId + "." + part->linkId);
+		}
+	}
 
 	vector<pair<btCollisionObject*, BitMask>> objects = scene.extractBulletObjectsAndBitMasks();
 
@@ -194,12 +244,39 @@ int main() {
 						|| q - 2.0 * M_PI > jointLimits[j][0] && q - 2.0 * M_PI < jointLimits[j][1]
 						|| q + 2.0 * M_PI > jointLimits[j][0] && q + 2.0 * M_PI < jointLimits[j][1]
 						)
-				) { continue; }
+				) { goto continueOuter; }
 				joints[j] = q;
 			}
 			return joints;
+
+		continueOuter:;
 		}
 		return {};
+	};
+
+	auto updatePoses = [&]() {
+		std::lock_guard<std::mutex> lock(posesMutex);
+
+		for (const auto& [id, poseMtx]: sharedPoses) {
+			if (id == "tcp") { continue; }
+
+			btMatrix3x3 basis(
+				poseMtx[0], poseMtx[1], poseMtx[2],
+				poseMtx[4], poseMtx[5], poseMtx[6],
+				poseMtx[8], poseMtx[9], poseMtx[10]
+			);
+
+			btVector3 origin(
+				poseMtx[3],
+				poseMtx[7],
+				poseMtx[11]
+			);
+
+			btTransform tf(basis, origin);
+			scene.getRobot(id).setBaseTrafo(tf);
+		}
+
+        sharedTcpPose = sharedPoses["tcp"];
 	};
 
 	auto setupVisualization = [&](const double* pose) -> void {
@@ -241,7 +318,8 @@ int main() {
 		std::cref(sampling),
 		std::ref(setupNeeded),
 		std::cref(latestRequestId),
-		std::cref(sharedPose),
+		std::cref(sharedTcpPose),
+		std::function<void(void)>(updatePoses),
 		std::function<void(const double[12])>(setupVisualization),
 		std::function<void(const double[12])>(updateVisualization),
 		std::function<float(const double[12])>(score),
@@ -253,5 +331,3 @@ int main() {
 
 	std::this_thread::sleep_for(std::chrono::hours(24));
 }
-
-// todo: objects movable, ignore object collision among each other, use better config
