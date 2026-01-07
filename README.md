@@ -38,3 +38,4 @@ open `localhost:8000/viewer.html` in a browser
 [Rubik's Cube](https://sketchfab.com/3d-models/the-rubiks-cube-high-poly-by-smakologg-3527bfcda2e1492395142423021c3ff2)
 [Basket Ball](https://sketchfab.com/3d-models/basket-ball-6900606bf6be47bbac9cdca845074c66)
 [Pallet](https://sketchfab.com/3d-models/pallet-ad8768f522184364af70b56846d10fcf)
+[Aluminium Profile](https://sketchfab.com/3d-models/aluminium-profile-2020-1f414907f99c4f2f95a5718bd1eeab2c)
