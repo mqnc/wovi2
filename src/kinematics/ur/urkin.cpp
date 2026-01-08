@@ -325,7 +325,7 @@ int get_config_id(
 
 	const double upperArmInclination = -q[1];
 	const double forearmInclination = upperArmInclination - q[2];
-	const double wristInclination = forearmInclination - q[3] - M_PI_2;
+	const double wristInclination = forearmInclination - q[3] + M_PI_2;
 	const double wristProjection =
 		dh.a2 * cos(upperArmInclination)
 		+ dh.a3 * cos(forearmInclination)
