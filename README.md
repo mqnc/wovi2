@@ -47,6 +47,15 @@ open `localhost:8000/viewer.html` in a browser
 
 As the code reuses parts of code from motion planners that were written for a company and only allowed to be published under the PolyForm Noncommercial License, this project must follow suit. If there is enough interest (and funding), these parts can (and should) be rewritten.
 
+# Future Ideas
+
+* Rewrite parts for permissive license
+* Use multi threading
+* Support other robot architectures
+* Make the scene configurable instead of hard-coding it
+* Color the workspace boundary depending on the reason for the limit; each obstacle, each joint limit and each singularity type can have a different color
+* Visualize the workspace that is reachable in a straight line from the current pose and the set of all reachable orientations at the current position
+
 # Credits
 
 [Kite Motion Planner](https://github.com/mqnc/kite-motion-planner) (PolyForm NC),
@@ -69,3 +78,5 @@ As the code reuses parts of code from motion planners that were written for a co
 [Basket Ball](https://sketchfab.com/3d-models/basket-ball-6900606bf6be47bbac9cdca845074c66) (CC BY),
 [Pallet](https://sketchfab.com/3d-models/pallet-ad8768f522184364af70b56846d10fcf) (CC BY),
 [Aluminium Profile](https://sketchfab.com/3d-models/aluminium-profile-2020-1f414907f99c4f2f95a5718bd1eeab2c) (CC BY)
+
+background rendered in [POV-Ray](https://www.povray.org/)

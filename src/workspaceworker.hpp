@@ -101,8 +101,15 @@ void workspaceWorker(
 			double poseRaw[12];
 			memcpy(poseRaw, pose.data(), sizeof(poseRaw));
 
+			bool statusBar = f >= sampling.resampleFactors[sampling.resampleFactors.size() / 2];
+			if (statusBar) { for (int i = 0; i < zRes; ++i) { std::cout << "_"; } }
+			std::cout << "\n" << std::flush;
+
 			for (int iz = 0; iz < zRes; ++iz) {
 				if (cancel()) break;
+
+				if (statusBar) { std::cout << "#" << std::flush; }
+
 				float z = sampling.zMin + iz * (sampling.zMax - sampling.zMin) / (zRes - 1);
 
 				for (int iy = 0; iy < yRes; ++iy) {
@@ -118,6 +125,8 @@ void workspaceWorker(
 					}
 				}
 			}
+
+			if (statusBar) { std::cout << "\n" << std::flush; }
 
 			if (cancel()) break;
 
