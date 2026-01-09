@@ -136,8 +136,7 @@ int main() {
 	spawn(
 		scene,
 		"robot",
-		// "/home/mirko/development/wovi2/models/ur5e/ur5e.urdf",
-		"/home/mirko/development/wovi2/models/ur/ur5e.urdf", {
+		"../models/ur/ur5e.urdf", {
 			{"package://ur_description/meshes/ur5e/collision", "meshes/ur5e/collision"},
 			{"package://ur_description/meshes/ur5e/visual", "models/ur/meshes/ur5e/visual"},
 		},
@@ -150,7 +149,7 @@ int main() {
 	spawn(
 		scene,
 		"1",
-		"/home/mirko/development/wovi2/models/pallet.urdf",
+		"../models/pallet.urdf",
 		{{"pallet.glb", "models/pallet.glb"}},
 		{0.2, 0.0, -0.075},
 		{},
@@ -161,7 +160,7 @@ int main() {
 	spawn(
 		scene,
 		"2",
-		"/home/mirko/development/wovi2/models/panel.urdf",
+		"../models/panel.urdf",
 		{{"panel.glb", "models/panel.glb"}},
 		{0, -0.7, 1 - 0.075, M_SQRT1_2, 0, 0, M_SQRT1_2},
 		{},
@@ -172,7 +171,7 @@ int main() {
 	spawn(
 		scene,
 		"3",
-		"/home/mirko/development/wovi2/models/cocube.urdf",
+		"../models/cocube.urdf",
 		{{"cocube.glb", "models/cocube.glb"}},
 		{0.6, 0.0, 0.351},
 		{},
@@ -183,7 +182,7 @@ int main() {
 	spawn(
 		scene,
 		"4",
-		"/home/mirko/development/wovi2/models/ball.urdf",
+		"../models/ball.urdf",
 		{{"ball.glb", "models/ball.glb"}},
 		{0, 0.6, 0},
 		{},
@@ -194,7 +193,7 @@ int main() {
 	spawn(
 		scene,
 		"5",
-		"/home/mirko/development/wovi2/models/rubik.urdf",
+		"../models/rubik.urdf",
 		{{"rubik.glb", "models/rubik.glb"}},
 		{-0.4, 0.4, 0.4},
 		{},
