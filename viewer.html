@@ -23,6 +23,33 @@
 </head>
 
 <body>
+
+    <div style="
+        position:fixed;
+        top:16px;
+        left:16px;
+        pointer-events:none;
+        z-index:1000;
+        background:rgba(0,0,0,0.5);
+        color:#fff;
+        padding:8px 14px;
+        border-radius:8px;
+        font-family:sans-serif;
+        font-size:14px;
+        text-align:left;
+    ">
+        Dynamic Workspace Visualization Demo by Mirko Kunze<br><br>
+
+        [T] – translation mode<br>
+        [R] – rotation mode<br>
+        [E] – select the robot end effector<br>
+        [1], [2], ... – select obstacle<br>
+        [Esc] – deselect everything<br>
+        [G] – move in global coordinates<br>
+        [L] – move in local coordinates<br>
+        🐭 – move the camera or drag the gizmos around
+    </div>
+
     <script type="module">
         import *as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -33,19 +60,19 @@
         import { ConvexHull } from 'three/addons/math/ConvexHull.js';
 
 
-        export function jsonToAxis(json) {
+        function jsonToAxis(json) {
             if (json == "x") { return new THREE.Vector3(1, 0, 0) }
             else if (json == "y") { return new THREE.Vector3(0, 1, 0) }
             else if (json == "z") { return new THREE.Vector3(0, 0, 1) }
             else { return jsonToVector(json).normalize() }
         }
 
-        export function jsonToVector(json) {
+        function jsonToVector(json) {
             console.assert(Array.isArray(json) && json.length == 3)
             return new THREE.Vector3(json[0], json[1], json[2])
         }
 
-        export function jsonToQuaternion(json, order) {
+        function jsonToQuaternion(json, order) {
             console.assert(Array.isArray(json) && json.length == 4)
             if (order === "xyzw") {
                 return new THREE.Quaternion(json[0], json[1], json[2], json[3])
@@ -350,7 +377,7 @@
         }
 
 
-        export function checkFields(obj, requiredKeys, optionalKeys = []) {
+        function checkFields(obj, requiredKeys, optionalKeys = []) {
             const objKeys = Object.keys(obj)
 
             const missingRequiredFields = requiredKeys.filter(key => !objKeys.includes(key))
@@ -369,7 +396,7 @@
         }
 
 
-        export const haloVertexShader = `
+        const haloVertexShader = `
             varying vec3 nml;
             varying vec3 pos;
 
@@ -379,7 +406,7 @@
                 gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
             }
         `
-        export const haloFragmentShader = `
+        const haloFragmentShader = `
             uniform vec3 glowColor;
             varying vec3 pos;
             varying vec3 nml;
@@ -397,7 +424,7 @@
         // 	roughness: 0.8,
         // 	metalness: 0.2,
         // })
-        export let coreMaterial = new depthPeelShaderMaterial({
+        let coreMaterial = new depthPeelShaderMaterial({
             uniforms: {
                 glowColor: { value: new THREE.Color(0.584, 0.059, 0.329) },
             },
@@ -405,9 +432,9 @@
             fragmentShader: haloFragmentShader,
             transparent: true
         });
-        export function setCoreMaterial(material) { coreMaterial = material }
+        function setCoreMaterial(material) { coreMaterial = material }
 
-        export let marginMaterial = new depthPeelShaderMaterial({
+        let marginMaterial = new depthPeelShaderMaterial({
             uniforms: {
                 glowColor: { value: new THREE.Color(0, 0.408, 0.459) },
             },
@@ -416,14 +443,14 @@
             side: THREE.BackSide,
             transparent: true
         });
-        export function setMarginMaterial(material) { marginMaterial = material }
+        function setMarginMaterial(material) { marginMaterial = material }
 
         let numCircleCorners = 20, icoDetail, sphereTemplateGeometry
         icoDetail = Math.floor(numCircleCorners / 5 - 1)
         sphereTemplateGeometry = new THREE.IcosahedronGeometry(1, icoDetail)
-        export let sphereTemplate = new THREE.Mesh(sphereTemplateGeometry)
+        let sphereTemplate = new THREE.Mesh(sphereTemplateGeometry)
 
-        export function setCurvatureSmoothness(newNumCircleCorners) {
+        function setCurvatureSmoothness(newNumCircleCorners) {
             numCircleCorners = newNumCircleCorners
             icoDetail = Math.floor(numCircleCorners / 5 - 1)
             sphereTemplateGeometry = new THREE.IcosahedronGeometry(1, icoDetail)
@@ -435,7 +462,7 @@
 
         const commonShapeKeys = ["margin", "collides", "stickyForce", "visuals"]
 
-        export function jsonToShapeObject(json, shapeId) {
+        function jsonToShapeObject(json, shapeId) {
             checkFields(json, ["kind"], [...commonShapeKeys,
                 "center", "radius", "pose", "size", "height", "axis", "points", "vertices", "faces"])
 
@@ -577,10 +604,6 @@
             return result
         }
 
-
-
-
-
         function shapeDataToMeshes(data) {
             switch (data.kind) {
                 case "Compound": {
@@ -682,8 +705,6 @@
         }
 
 
-
-
         const DepthPeelStandardMaterial = DepthPeelMaterialMixin(THREE.MeshStandardMaterial);
 
         const scene = new THREE.Scene();
@@ -697,19 +718,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0x000000, 1);
         document.body.appendChild(renderer.domElement);
-
-        // const loader = new GLTFLoader()
-        // loader.load(
-        //     "models_/ur5e.glb",
-        //     function (gltf) { scene.add(gltf.scene) },
-        //     function (xhr) {
-        //         // console.log((xhr.loaded / xhr.total * 100) + '% loaded')
-        //     },
-        //     function (error) {
-        //         console.error('error loading ' + path)
-        //         reject()
-        //     }
-        // )
 
         const pmremGenerator = new THREE.PMREMGenerator(renderer);
         pmremGenerator.compileCubemapShader()
@@ -782,6 +790,7 @@
 
         });
 
+
         scene.add(new THREE.AxesHelper(1));
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.5));
@@ -820,14 +829,13 @@
 
         let setUp = false;
 
+        let pickables = []
         ws.onmessage = (ev) => {
 
             if (typeof ev.data == "string") {
                 // json -> scene visualization, shapes and poses of objects
 
                 const json = JSON.parse(ev.data);
-
-                console.log(json)
 
                 if (!setUp && !json.__isUpdate__) {
                     for (let objData of json) {
@@ -839,7 +847,8 @@
                         let vis = shapeDataToMeshes(objData.visual)
                         obj.add(vis)
 
-                        if (/^\d\./.test(obj.name)) { // does name start with digit and "."? -> make gizmo-movable
+                        if (/^\d\./.test(obj.name)) { // does name start with digit and "."? -> make dragable
+                            pickables.push(obj)
                             let helper = new THREE.Object3D();
                             helper.name = "__handle__" + obj.name[0];
                             handles[obj.name[0]] = helper;
@@ -896,6 +905,31 @@
                 }
             }, 50);
         };
+
+
+
+        // const raycaster = new THREE.Raycaster()
+        // const mouse = new THREE.Vector2()
+        // function onclick(event) {
+        //     mouse.set((event.clientX / renderer.domElement.clientWidth) * 2 - 1, -(event.clientY / renderer.domElement.clientHeight) * 2 + 1)
+        //     raycaster.setFromCamera(mouse, camera)
+        //     let intersects = raycaster.intersectObjects(pickables, true)
+
+        //     for (const hit of intersects) {
+        //         let obj = hit.object
+        //         while (obj && !pickables.includes(obj)) {
+        //             obj = obj.parent
+        //         }
+        //         if (obj && pickables.includes(obj)) {
+        //             console.log(obj)
+        //             break
+        //         }
+        //     }
+        // }
+        // document.addEventListener('click', onclick, false)
+
+
+
 
         function animate() {
             requestAnimationFrame(animate);
