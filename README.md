@@ -1,6 +1,8 @@
 # WoVi2
 
-Dynamic collision-aware workspace visualization for robotic manipulators
+Dynamic Collision-Aware Workspace Visualization for Robotic Manipulators
+
+[![ytlink](https://github.com/user-attachments/assets/8deec5ff-0d57-4c16-a3fb-84c5aa5c89c7)](https://youtu.be/jAGrm1PO3ao)
 
 Aim of this project is to explore interactive workspace visualization as a tool for robot cell design as well as robot and tool design. It is the successor of my [dissertation project](https://github.com/mqnc/wovi).
 
